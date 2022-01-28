@@ -18,3 +18,15 @@ Optionally, you can also uncomment the `await handle.result()`, rerun, and see t
 ```bash
 Hello, Temporal!
 ```
+
+
+### Upgrading/Versioning
+
+- Changing `SCRAPE_FREQUENCY` doesn't require patching as X
+
+### TODOs
+
+- Cleanup with continueAsNew
+- Activity implementation
+- Retry failed scrapes via activity heartbeating
+- Re-balancing after removing a url from a batch

@@ -30,6 +30,9 @@ module.exports = {
     ],
     '@typescript-eslint/no-explicit-any': 'off',
 
+    // this happens a lot in temporal
+    'no-constant-condition': 'off',
+
     'quick-prettier/prettier': 1
   },
 };
