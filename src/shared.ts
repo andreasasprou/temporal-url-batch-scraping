@@ -1,18 +1,23 @@
-import { WorkflowHandle } from '@temporalio/client'
-import { ExternalWorkflowHandle } from '@temporalio/workflow/lib/workflow-handle'
+import type { WorkflowHandle } from '@temporalio/client'
+import type { ExternalWorkflowHandle } from '@temporalio/workflow/lib/workflow-handle'
 import { defineSignal } from '@temporalio/workflow'
 
-export const DEFAULT_TASK_QUEUE = 'url-scraper-v1'
+const VERSION = 'v0.8'
 
-export const BATCH_ID_ASSIGNER_SINGLETON_WORKFLOW_ID = 'batch-id-assigner-workflow-v2'
+export const DEFAULT_TASK_QUEUE = `url-scraper-${VERSION}`
+
+export const BATCH_ID_ASSIGNER_SINGLETON_WORKFLOW_ID = `batch-id-assigner-workflow-${VERSION}`
 
 // Time unit accepted by https://www.npmjs.com/package/ms
-export const SCRAPE_INTERVAL = process.env.SCRAPE_INTERVAL || '10s'
+export const SCRAPE_INTERVAL = '10s'
+export const MAX_BATCH_SIZE = 2
 
-export const getBatchProcessorWorkflowId = (batchId: number) => `batch-processors:${batchId}`
+export const getBatchProcessorWorkflowId = (batchId: number) => `batch-processors-${VERSION}:${batchId}`
 
 // TODO: Apply transformation on url to normalise it etc
-export const getScrapedUrlStateWorkflowId = (url: string) => `scraped-url-state-v9:${url}`
+export const getScrapedUrlStateWorkflowId = (url: string) => `scraped-url-state-${VERSION}:${url}`
+
+const pingWorkflowSignal = defineSignal('internal_pingWorkflowSignal')
 
 type ErrorWithCode = Error & {
   code?: 5
@@ -20,7 +25,7 @@ type ErrorWithCode = Error & {
 
 export async function isWorkflowRunning(handle: WorkflowHandle): Promise<boolean> {
   try {
-    await handle.describe()
+    await handle.signal(pingWorkflowSignal)
   } catch (error) {
     // does code === 5 => NOT_FOUND, already completed, failed etc?
     const isWorkflowNotRunningError = (error as ErrorWithCode).code === 5
@@ -35,8 +40,6 @@ export async function isWorkflowRunning(handle: WorkflowHandle): Promise<boolean
 
   return true
 }
-
-const pingWorkflowSignal = defineSignal('internal_pingWorkflowSignal')
 
 type ExternalWorkflowHandleError = Error & {
   type: 'ExternalWorkflowExecutionNotFound'

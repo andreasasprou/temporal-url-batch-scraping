@@ -16,7 +16,7 @@ export const assignUrlToBatchProcessorWorkflow = async (url: string, batchIdToAs
 
     // Replace with signalWithStart once implemented https://github.com/temporalio/temporal/issues/537
     if (!(await isExternalWorkflowRunning(batchProcessorHandle))) {
-      console.log('creating new batch workflow to start scraping url', url)
+      console.log('creating new batch workflow to start scraping url', { url, batchIdToAssignTo })
 
       batchProcessorHandle = await startChild(scrapeUrlBatchWorkflow, {
         workflowId: getBatchProcessorWorkflowId(batchIdToAssignTo),
@@ -26,9 +26,14 @@ export const assignUrlToBatchProcessorWorkflow = async (url: string, batchIdToAs
             batchId: batchIdToAssignTo
           }
         ]
+      }).catch((error) => {
+        console.log(error)
+        console.log(`failed to start batch processor workflow for batch id ${batchIdToAssignTo}`)
+
+        throw error
       })
     } else {
-      console.log('re-using batch workflow to start scraping url', url)
+      console.log('re-using batch workflow to start scraping url', { url, batchIdToAssignTo })
     }
 
     // TODO: UNLOCK
@@ -36,7 +41,7 @@ export const assignUrlToBatchProcessorWorkflow = async (url: string, batchIdToAs
     return batchProcessorHandle
   }
 
-  console.log('signaling to batch handler to start scraping url', url)
+  console.log('signaling to batch handler to start scraping url', { url, batchIdToAssignTo })
 
   const handler = await findOrStartBatchProcessorWorkflow()
 

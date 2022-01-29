@@ -41,7 +41,6 @@ To overcome this issue, we will record the batches with gaps in the batch id ass
 - [ ] What to do if you terminate the batch id singleton
 - [ ] How to handle failures inside batch id assigner singleton such that it doesn't crash it (e.g. via `handler.signal` etc)
 
-
 ### Overview
 
 https://app.excalidraw.com/l/60O4zdIqdtq/6iZauXuE2DA

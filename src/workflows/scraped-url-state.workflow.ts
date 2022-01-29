@@ -59,14 +59,6 @@ export async function scrapedUrlStateWorkflow({ url }: Payload) {
     await requestBatchIdForUrl({ url })
 
     console.log('requested new batch ID', url)
-
-    const TIMEOUT = '30sec'
-
-    await condition(() => Boolean(batchId), ms('30sec'))
-
-    if (!batchId) {
-      error(`did not receive new batch ID after ${TIMEOUT}. TODO: Handle this.`)
-    }
   }
 
   // Run forever unless we signal to stop scraping

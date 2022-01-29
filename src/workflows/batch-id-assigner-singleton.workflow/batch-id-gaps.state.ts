@@ -5,6 +5,7 @@ export function useBatchIsGapsState() {
     incNumberOfGaps: (batchId: number) => {
       batchIdToNumberOfGaps.set(batchId, (batchIdToNumberOfGaps.get(batchId) ?? 0) + 1)
     },
+    batchIdToNumberOfGaps,
     pullFirstBatchIdWithGap: (): number | undefined => {
       const hasBatchWithGap = batchIdToNumberOfGaps.size > 0
 

@@ -6,6 +6,7 @@ import { newGapSignal, startScrapingUrlSignal, stopScrapingUrlSignal } from '../
 import { proxyActivities } from '@temporalio/workflow'
 // Only import the activity types
 import type * as activities from '../activities'
+import { getUrlsInBatchQuery } from '../queries'
 
 const { scrapeUrls: scrapeUrlsActivity } = proxyActivities<typeof activities>({
   startToCloseTimeout: '1 minute'
@@ -27,6 +28,8 @@ export async function scrapeUrlBatchWorkflow({ batchId, initialState }: ScrapeUr
     console.log('got new url', url)
     urls.push(url)
   })
+
+  setHandler(getUrlsInBatchQuery, () => urls)
 
   const signalThatIHaveAGap = async () => {
     const handle = getExternalWorkflowHandle(BATCH_ID_ASSIGNER_SINGLETON_WORKFLOW_ID)

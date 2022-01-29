@@ -1,12 +1,12 @@
-import { getScrapedUrlStateWorkflowId, isExternalWorkflowRunning } from '../../shared'
+import { getScrapedUrlStateWorkflowId, isExternalWorkflowRunning, MAX_BATCH_SIZE } from '../../shared'
 import { assignToBatchSignal, batchIdAssignedSignal, BatchIdAssignedSignalPayload, newGapSignal } from '../../signals'
 import { continueAsNew, getExternalWorkflowHandle, setHandler, sleep } from '@temporalio/workflow'
 import ms from 'ms'
 import { useBatchIsGapsState } from './batch-id-gaps.state'
 import { assignUrlToBatchProcessorWorkflow } from './assign-url-to-batch-processor'
+import { getBatchIdGapsQuery } from '../../queries'
 
 // We want this as large as possible. TODO: document tradeoffs & heuristics to estimate it's max
-const MAX_BATCH_SIZE = 200
 
 interface Payload {
   initialState?: {
@@ -16,22 +16,16 @@ interface Payload {
 }
 
 export async function batchIdAssignerSingletonWorkflow({ initialState }: Payload = {}) {
-  const { incNumberOfGaps, pullFirstBatchIdWithGap } = useBatchIsGapsState()
+  const { incNumberOfGaps, pullFirstBatchIdWithGap, batchIdToNumberOfGaps } = useBatchIsGapsState()
+
+  setHandler(getBatchIdGapsQuery, () => batchIdToNumberOfGaps)
 
   let numberOfSignalsHandled = 0
   let numberOfUrlsInCurrentBatch = initialState?.numberOfUrlsInCurrentBatch ?? 0
-  let currentBatchId: number | undefined = initialState?.currentBatchId
-
-  const generateNextBatchId = () => {
-    if (!currentBatchId) {
-      return 0
-    }
-
-    return currentBatchId + 1
-  }
+  let currentBatchId: number = initialState?.currentBatchId ?? 0
 
   const cycleToNewBatch = () => {
-    currentBatchId = generateNextBatchId()
+    currentBatchId += 1
     numberOfUrlsInCurrentBatch = 0
   }
 
