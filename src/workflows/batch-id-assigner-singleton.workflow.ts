@@ -10,7 +10,7 @@ import {
   assignToBatchSignal,
   startScrapingUrlSignal
 } from '../signals'
-import { getExternalWorkflowHandle, setHandler, sleep, startChild } from '@temporalio/workflow'
+import { continueAsNew, getExternalWorkflowHandle, setHandler, sleep, startChild } from '@temporalio/workflow'
 import { scrapeUrlBatchWorkflow } from './scrape-url-batch.workflow'
 import ms from 'ms'
 import { ExternalWorkflowHandle } from '@temporalio/workflow/lib/workflow-handle'
@@ -18,9 +18,17 @@ import { ExternalWorkflowHandle } from '@temporalio/workflow/lib/workflow-handle
 // We want this as large as possible. TODO: document tradeoffs & heuristics to estimate it's max
 const MAX_BATCH_SIZE = 200
 
-export async function batchIdAssignerSingletonWorkflow() {
-  let numberOfUrlsInCurrentBatch = 0
-  let currentBatchId: number | undefined = undefined
+interface Payload {
+  initialState?: {
+    numberOfUrlsInCurrentBatch: number
+    currentBatchId: number | undefined
+  }
+}
+
+export async function batchIdAssignerSingletonWorkflow({ initialState }: Payload) {
+  let numberOfSignalsHandled = 0
+  let numberOfUrlsInCurrentBatch = initialState?.numberOfUrlsInCurrentBatch ?? 0
+  let currentBatchId: number | undefined = initialState?.currentBatchId
 
   const generateNextBatchId = () => {
     if (!currentBatchId) {
@@ -117,6 +125,19 @@ export async function batchIdAssignerSingletonWorkflow() {
     })
 
     console.log('notified state workflow with new batch id', { url, nextBatchId })
+
+    numberOfSignalsHandled += 1
+
+    const shouldContinueAsNew = numberOfSignalsHandled === 1000
+
+    if (shouldContinueAsNew) {
+      await continueAsNew<typeof batchIdAssignerSingletonWorkflow>({
+        initialState: {
+          currentBatchId,
+          numberOfUrlsInCurrentBatch
+        }
+      })
+    }
   })
 
   // Run forever (is there a better way of doing this in Temporal?)

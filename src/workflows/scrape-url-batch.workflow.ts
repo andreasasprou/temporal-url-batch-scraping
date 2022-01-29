@@ -1,4 +1,4 @@
-import { setHandler, sleep } from '@temporalio/workflow'
+import { continueAsNew, setHandler, sleep } from '@temporalio/workflow'
 import { SCRAPE_FREQUENCY } from '../shared'
 import ms from 'ms'
 import { startScrapingUrlSignal, stopScrapingUrlSignal } from '../signals'
@@ -13,10 +13,14 @@ const { scrapeUrls: scrapeUrlsActivity } = proxyActivities<typeof activities>({
 
 interface ScrapeUrlBatchWorkflowPayload {
   batchId: number
+  initialState?: {
+    urls: string[]
+  }
 }
 
-export async function scrapeUrlBatchWorkflow({ batchId }: ScrapeUrlBatchWorkflowPayload) {
-  let urls: string[] = []
+export async function scrapeUrlBatchWorkflow({ batchId, initialState }: ScrapeUrlBatchWorkflowPayload) {
+  let numberOfIterations = 0
+  let urls: string[] = initialState?.urls ?? []
 
   // TODO: ensure we never run this handler whilst we're executing the core functionality
   setHandler(startScrapingUrlSignal, async ({ url }) => {
@@ -47,5 +51,19 @@ export async function scrapeUrlBatchWorkflow({ batchId }: ScrapeUrlBatchWorkflow
     await scrapeUrls()
 
     await sleep(ms(SCRAPE_FREQUENCY))
+
+    numberOfIterations += 1
+
+    // TODO: Document this estimate
+    const shouldContinueAsNew = numberOfIterations === 300
+
+    if (shouldContinueAsNew) {
+      await continueAsNew<typeof scrapeUrlBatchWorkflow>({
+        batchId,
+        initialState: {
+          urls
+        }
+      })
+    }
   }
 }

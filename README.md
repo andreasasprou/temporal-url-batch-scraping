@@ -26,7 +26,8 @@ Hello, Temporal!
 
 ### TODOs
 
-- Cleanup with continueAsNew
+- Cleanup with continueAsNew ✅
+  - Heuristic estimation guidelines for continueAsNew & event history
 - Activity implementation
 - Retry failed scrapes via activity heartbeating
 - Re-balancing after removing a url from a batch
