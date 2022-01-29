@@ -15,7 +15,7 @@ interface Payload {
   }
 }
 
-export async function batchIdAssignerSingletonWorkflow({ initialState }: Payload) {
+export async function batchIdAssignerSingletonWorkflow({ initialState }: Payload = {}) {
   const { incNumberOfGaps, pullFirstBatchIdWithGap } = useBatchIsGapsState()
 
   let numberOfSignalsHandled = 0
