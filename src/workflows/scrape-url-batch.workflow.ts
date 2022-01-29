@@ -1,5 +1,5 @@
 import { continueAsNew, getExternalWorkflowHandle, setHandler, sleep } from '@temporalio/workflow'
-import { BATCH_ID_ASSIGNER_SINGLETON_WORKFLOW_ID, SCRAPE_FREQUENCY } from '../shared'
+import { BATCH_ID_ASSIGNER_SINGLETON_WORKFLOW_ID, SCRAPE_INTERVAL } from '../shared'
 import ms from 'ms'
 import { newGapSignal, startScrapingUrlSignal, stopScrapingUrlSignal } from '../signals'
 
@@ -60,7 +60,7 @@ export async function scrapeUrlBatchWorkflow({ batchId, initialState }: ScrapeUr
   while (true) {
     await scrapeUrls()
 
-    await sleep(ms(SCRAPE_FREQUENCY))
+    await sleep(ms(SCRAPE_INTERVAL))
 
     numberOfIterations += 1
 

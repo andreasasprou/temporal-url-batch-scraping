@@ -7,7 +7,7 @@ export const DEFAULT_TASK_QUEUE = 'url-scraper-v1'
 export const BATCH_ID_ASSIGNER_SINGLETON_WORKFLOW_ID = 'batch-id-assigner-workflow-v2'
 
 // Time unit accepted by https://www.npmjs.com/package/ms
-export const SCRAPE_FREQUENCY = '10s'
+export const SCRAPE_INTERVAL = process.env.SCRAPE_INTERVAL || '10s'
 
 export const getBatchProcessorWorkflowId = (batchId: number) => `batch-processors:${batchId}`
 

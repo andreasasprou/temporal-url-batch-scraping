@@ -18,6 +18,12 @@ async function run() {
 
   console.log(`Started workflow ${handle.workflowId}`)
 
+  const shouldStopScraping = false
+
+  if (!shouldStopScraping) {
+    return
+  }
+
   const stopScraping = async () => {
     await handle.signal(stopScrapingUrlSignal, {
       url
