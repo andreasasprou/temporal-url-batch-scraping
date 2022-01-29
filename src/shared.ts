@@ -2,7 +2,7 @@ import type { WorkflowHandle } from '@temporalio/client'
 import type { ExternalWorkflowHandle } from '@temporalio/workflow/lib/workflow-handle'
 import { defineSignal } from '@temporalio/workflow'
 
-const VERSION = 'v0.8'
+const VERSION = 'v0.12'
 
 export const DEFAULT_TASK_QUEUE = `url-scraper-${VERSION}`
 

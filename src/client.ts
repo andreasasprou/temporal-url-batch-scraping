@@ -29,21 +29,21 @@ const getBatchIdsMapFromWorkflow = async () => {
 }
 
 async function run() {
-  for (const url of urls) {
-    const handle = await temporalClient.start(scrapedUrlStateWorkflow, {
-      args: [
-        {
-          url
-        }
-      ],
-      taskQueue: DEFAULT_TASK_QUEUE,
-      workflowId: getScrapedUrlStateWorkflowId(url)
+  await Promise.all(
+    urls.map(async (url) => {
+      const handle = await temporalClient.start(scrapedUrlStateWorkflow, {
+        args: [
+          {
+            url
+          }
+        ],
+        taskQueue: DEFAULT_TASK_QUEUE,
+        workflowId: getScrapedUrlStateWorkflowId(url)
+      })
+
+      console.log(`Started workflow ${handle.workflowId} for url "${url}"`)
     })
-
-    console.log(`Started workflow ${handle.workflowId} for url "${url}"`)
-
-    await sleep('3s')
-  }
+  )
 
   return
 
