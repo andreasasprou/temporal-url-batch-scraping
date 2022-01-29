@@ -1,10 +1,14 @@
 import { getScrapedUrlStateWorkflowId, isExternalWorkflowRunning, MAX_BATCH_SIZE } from '../../shared'
 import { assignToBatchSignal, batchIdAssignedSignal, BatchIdAssignedSignalPayload, newGapSignal } from '../../signals'
-import { continueAsNew, getExternalWorkflowHandle, setHandler, sleep } from '@temporalio/workflow'
+import { continueAsNew, getExternalWorkflowHandle, setHandler, sleep, proxyActivities } from '@temporalio/workflow'
 import ms from 'ms'
 import { useBatchIsGapsState } from './batch-id-gaps.state'
-import { assignUrlToBatchProcessorWorkflow } from './assign-url-to-batch-processor'
 import { getBatchIdGapsQuery } from '../../queries'
+import type * as activities from '../../activities'
+
+const { ensureBatchProcessorWorkflowForURL: ensureBatchProcessorWorkflowForURLActivity } = proxyActivities<typeof activities>({
+  startToCloseTimeout: '1 minute'
+})
 
 // We want this as large as possible. TODO: document tradeoffs & heuristics to estimate it's max
 
@@ -66,9 +70,9 @@ export async function batchIdAssignerSingletonWorkflow({ initialState }: Payload
 
     const nextBatchId = getNextBatchId()
 
-    await assignUrlToBatchProcessorWorkflow(url, nextBatchId)
-
     console.log('next batch id', { url, nextBatchId })
+
+    await ensureBatchProcessorWorkflowForURLActivity({ url, batchId: nextBatchId })
 
     await notifyStateWorkflowWithItsNewBatchId({
       url,
