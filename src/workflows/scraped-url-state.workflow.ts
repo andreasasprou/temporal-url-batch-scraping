@@ -1,19 +1,17 @@
-import { condition, setHandler } from '@temporalio/workflow'
+import { condition, getExternalWorkflowHandle, setHandler } from '@temporalio/workflow'
 
-import { getNextBatchIdSignal } from '../queries'
-import { BATCH_ID_ASSIGNER_SINGLETON_WORKFLOW_ID, getBatchProcessorWorkflowId, temporalClient } from '../shared'
-import { stopScrapingUrlSignal } from '../signals'
+import { BATCH_ID_ASSIGNER_SINGLETON_WORKFLOW_ID, getBatchProcessorWorkflowId } from '../shared'
+import { batchIdAssignedSignal, assignToBatchSignal, stopScrapingUrlSignal } from '../signals'
+import ms from 'ms'
 
 interface Payload {
   url: string
 }
 
-async function getNextBatchId({ url }: Pick<Payload, 'url'>) {
-  const handle = await temporalClient.getHandle(BATCH_ID_ASSIGNER_SINGLETON_WORKFLOW_ID)
+async function requestBatchIdForUrl({ url }: Pick<Payload, 'url'>) {
+  const handle = await getExternalWorkflowHandle(BATCH_ID_ASSIGNER_SINGLETON_WORKFLOW_ID)
 
-  const result = await handle.query(getNextBatchIdSignal, { url })
-
-  return result.nextBatchId
+  await handle.signal(assignToBatchSignal, { url })
 }
 
 async function stopScrapingUrl({
@@ -22,41 +20,68 @@ async function stopScrapingUrl({
 }: Pick<Payload, 'url'> & {
   batchId: number
 }) {
-  const handle = await temporalClient.getHandle(getBatchProcessorWorkflowId(batchId))
+  console.log('Requesting new batch id')
+
+  const handle = getExternalWorkflowHandle(getBatchProcessorWorkflowId(batchId))
 
   await handle!.signal(stopScrapingUrlSignal, { url })
 }
 
-const log = (message: string, ...rest: Parameters<typeof console.debug>) =>
-  console.debug(`scrapedUrlStateWorkflow: ${message}`, ...rest)
+const error = (message: string, ...rest: Parameters<typeof console.debug>) => console.log(`⚠️ ${message}`, ...rest)
 
 export async function scrapedUrlStateWorkflow({ url }: Payload) {
   let batchId: number | undefined = undefined
   let didStopScraping = false
 
-  log('starting to scrape url', url)
+  console.log('starting to scrape url', url)
 
-  if (!batchId) {
-    batchId = await getNextBatchId({ url })
+  setHandler(batchIdAssignedSignal, (payload) => {
+    if (url !== payload.url) {
+      error('attempted to use batch ID assigned to another url. This should not happen.', {
+        url,
+        payloadUrl: payload.url
+      })
+      return
+    }
 
-    log('assigned to batch', batchId)
+    batchId = payload.batchId
+
+    console.log('assigned new batch ID', { url, batchId })
 
     // potentially add a search attribute for batch id
-  }
+  })
 
   setHandler(stopScrapingUrlSignal, () => {
     didStopScraping = true
   })
 
+  if (!batchId) {
+    await requestBatchIdForUrl({ url })
+
+    console.log('requested new batch ID', url)
+
+    const TIMEOUT = '30sec'
+
+    await condition(() => Boolean(batchId), ms('30sec'))
+
+    if (!batchId) {
+      error(`did not receive new batch ID after ${TIMEOUT}. TODO: Handle this.`)
+    }
+  }
+
   // Run forever unless we signal to stop scraping
   await condition(() => didStopScraping)
 
-  log('stopping the scrape for url', url)
+  console.log('stopping the scrape for url', url)
 
-  await stopScrapingUrl({
-    url,
-    batchId
-  })
+  if (batchId) {
+    await stopScrapingUrl({
+      url,
+      batchId
+    })
+  } else {
+    error('failed to stop scraping url as it was never assigned a batch ID', url)
+  }
 
   return {
     url,

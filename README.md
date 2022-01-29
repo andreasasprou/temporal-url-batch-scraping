@@ -30,3 +30,6 @@ Hello, Temporal!
 - Activity implementation
 - Retry failed scrapes via activity heartbeating
 - Re-balancing after removing a url from a batch
+- Error handling in stopScrapingUrl
+- What to do if you terminate the batch id singleton
+- How to handle failures inside batch id assigner singleton such that it doesn't crash it (e.g. via `handler.signal` etc)

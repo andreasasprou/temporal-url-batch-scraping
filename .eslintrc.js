@@ -33,6 +33,9 @@ module.exports = {
     // this happens a lot in temporal
     'no-constant-condition': 'off',
 
+    // I'd rather it throw
+    '@typescript-eslint/no-non-null-assertion': 'off',
+
     'quick-prettier/prettier': 1
   },
 };

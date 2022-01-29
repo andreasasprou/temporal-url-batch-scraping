@@ -1,4 +1,5 @@
-import { DEFAULT_TASK_QUEUE, getScrapedUrlStateWorkflowId, temporalClient } from './shared'
+import { DEFAULT_TASK_QUEUE, getScrapedUrlStateWorkflowId } from './shared'
+import { temporalClient } from './temporal-client'
 import { scrapedUrlStateWorkflow } from './workflows'
 
 async function run() {
