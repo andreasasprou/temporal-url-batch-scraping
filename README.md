@@ -19,6 +19,15 @@ Optionally, you can also uncomment the `await handle.result()`, rerun, and see t
 Hello, Temporal!
 ```
 
+### Ensuring batches with gaps are filled after removing a scraped url from the batch
+
+Initially, our batch id assigner doesn't care about past batches, it assumes that all batches before `currentBatchId` are completely full.
+This becomes problematic when we want to stop scraping a url. If we remove a url from a batch url list, we'll now have a gap and start to become inefficient in our batching (breaking the rule below): 
+```
+number of activities run ~= (number of urls) / MAX_BATCH_SIZE
+```
+
+To overcome this, we will record the batches with gaps in the batch id assigner and prioritise batches with gaps when assigning new urls to a batch.
 
 ### Upgrading/Versioning
 
@@ -30,7 +39,6 @@ Hello, Temporal!
   - Heuristic estimation guidelines for continueAsNew & event history
 - Activity implementation
 - Retry failed scrapes via activity heartbeating
-- Re-balancing after removing a url from a batch
-- Error handling in stopScrapingUrl
+- Re-assign batch gaps after removing a url from a batch ✅
 - What to do if you terminate the batch id singleton
 - How to handle failures inside batch id assigner singleton such that it doesn't crash it (e.g. via `handler.signal` etc)

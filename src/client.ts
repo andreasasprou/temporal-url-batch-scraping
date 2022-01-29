@@ -1,6 +1,7 @@
 import { DEFAULT_TASK_QUEUE, getScrapedUrlStateWorkflowId } from './shared'
 import { temporalClient } from './temporal-client'
 import { scrapedUrlStateWorkflow } from './workflows'
+import { stopScrapingUrlSignal } from './signals'
 
 async function run() {
   const url = 'https://github.com/temporalio/sdk-typescript/blob/HEAD/CHANGELOG.md'
@@ -16,6 +17,17 @@ async function run() {
   })
 
   console.log(`Started workflow ${handle.workflowId}`)
+
+  const stopScraping = async () => {
+    await handle.signal(stopScrapingUrlSignal, {
+      url
+    })
+  }
+
+  // Should scrape 3 times then cancel
+  setTimeout(() => {
+    void stopScraping()
+  }, 48000)
 }
 
 run().catch((err) => {

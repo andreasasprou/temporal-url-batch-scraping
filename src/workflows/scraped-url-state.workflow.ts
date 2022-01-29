@@ -24,7 +24,7 @@ async function stopScrapingUrl({
 
   const handle = getExternalWorkflowHandle(getBatchProcessorWorkflowId(batchId))
 
-  await handle!.signal(stopScrapingUrlSignal, { url })
+  await handle.signal(stopScrapingUrlSignal, { url })
 }
 
 const error = (message: string, ...rest: Parameters<typeof console.debug>) => console.log(`⚠️ ${message}`, ...rest)

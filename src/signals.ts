@@ -1,6 +1,6 @@
 import { defineSignal } from '@temporalio/workflow'
 
-interface PayloadWithUrl {
+type PayloadWithUrl = {
   url: string
 }
 
@@ -21,3 +21,9 @@ export type BatchIdAssignedSignalPayload = PayloadWithUrl & {
 }
 
 export const batchIdAssignedSignal = defineSignal<[BatchIdAssignedSignalPayload]>('requestNewBatchIdSignal')
+
+export type NewGapSignal = {
+  batchId: number
+}
+
+export const newGapSignal = defineSignal<[NewGapSignal]>('newGapSignal')

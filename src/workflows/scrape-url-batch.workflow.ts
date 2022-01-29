@@ -1,7 +1,7 @@
-import { continueAsNew, setHandler, sleep } from '@temporalio/workflow'
-import { SCRAPE_FREQUENCY } from '../shared'
+import { continueAsNew, getExternalWorkflowHandle, setHandler, sleep } from '@temporalio/workflow'
+import { BATCH_ID_ASSIGNER_SINGLETON_WORKFLOW_ID, SCRAPE_FREQUENCY } from '../shared'
 import ms from 'ms'
-import { startScrapingUrlSignal, stopScrapingUrlSignal } from '../signals'
+import { newGapSignal, startScrapingUrlSignal, stopScrapingUrlSignal } from '../signals'
 
 import { proxyActivities } from '@temporalio/workflow'
 // Only import the activity types
@@ -28,13 +28,23 @@ export async function scrapeUrlBatchWorkflow({ batchId, initialState }: ScrapeUr
     urls.push(url)
   })
 
+  const signalThatIHaveAGap = async () => {
+    const handle = getExternalWorkflowHandle(BATCH_ID_ASSIGNER_SINGLETON_WORKFLOW_ID)
+
+    await handle.signal(newGapSignal, {
+      batchId
+    })
+
+    console.log('signalled that I have a new gap')
+  }
+
   // TODO: ensure we never run this handler whilst we're executing the core functionality
   setHandler(stopScrapingUrlSignal, ({ url }) => {
     console.log('removing url from scrape list', url)
 
     urls = urls.filter((oldUrl) => oldUrl !== url)
 
-    // TODO: Signal that we have a gap
+    void signalThatIHaveAGap()
   })
 
   const scrapeUrls = async () => {
