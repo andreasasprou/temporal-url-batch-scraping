@@ -4,7 +4,7 @@ This repo implements a periodic URL scraper in Temporal.
 
 URL scraping could be implemented with cron workflows with a 1-1 mapping between a URL and an activity. This becomes problematic as you scale the number of URLs as you'll be incurring the expensive cost of running an activity for every new url you add, every scrape interval.
 
-To overcome these performance issues, we define the following goal:
+To overcome these performance issues, we'll define the following goal:
 
 > Batching URLs so an activity can process multiple URLs at once, i.e. the number of activities executed per interval should approximately equal (number of urls) / MAX_BATCH_SIZE
 
@@ -33,10 +33,15 @@ To overcome this issue, we will record the batches with gaps in the batch id ass
 
 ### TODOs
 
-- Cleanup with continueAsNew ✅
-  - Heuristic estimation guidelines for continueAsNew & event history
-- Activity implementation
-- Retry failed scrapes via activity heartbeating
-- Re-assign batch gaps after removing a url from a batch ✅
-- What to do if you terminate the batch id singleton
-- How to handle failures inside batch id assigner singleton such that it doesn't crash it (e.g. via `handler.signal` etc)
+- [x] Cleanup with continueAsNew
+- [ ] Heuristic estimation guidelines for continueAsNew & event history
+- [ ] Activity implementation
+- [ ] Retry failed scrapes via activity heartbeating
+- [x] Re-assign batch gaps after removing a url from a batch
+- [ ] What to do if you terminate the batch id singleton
+- [ ] How to handle failures inside batch id assigner singleton such that it doesn't crash it (e.g. via `handler.signal` etc)
+
+
+### Overview
+
+https://app.excalidraw.com/l/60O4zdIqdtq/6iZauXuE2DA
