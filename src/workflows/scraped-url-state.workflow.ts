@@ -20,8 +20,6 @@ async function stopScrapingUrl({
 }: Pick<Payload, 'url'> & {
   batchId: number
 }) {
-  console.log('Requesting new batch id')
-
   const handle = getExternalWorkflowHandle(getBatchProcessorWorkflowId(batchId))
 
   await handle.signal(stopScrapingUrlSignal, { url })
@@ -55,7 +53,7 @@ export async function scrapedUrlStateWorkflow({ url }: Payload) {
     didStopScraping = true
   })
 
-  if (!batchId) {
+  if (batchId === undefined) {
     await requestBatchIdForUrl({ url })
 
     console.log('requested new batch ID', url)
@@ -66,15 +64,15 @@ export async function scrapedUrlStateWorkflow({ url }: Payload) {
 
   console.log('stopping the scrape for url', url)
 
-  if (batchId) {
+  if (batchId === undefined) {
+    error('failed to stop scraping url as it was never assigned a batch ID', url)
+  } else {
     await stopScrapingUrl({
       url,
       batchId
     })
-  } else {
-    error('failed to stop scraping url as it was never assigned a batch ID', url)
   }
-
+  
   return {
     url,
     batchId

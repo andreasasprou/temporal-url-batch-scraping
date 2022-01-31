@@ -15,7 +15,7 @@ export function useBatchIsGapsState() {
 
       const firstBatchIdWithGap = batchIdToNumberOfGaps.keys().next().value as number
 
-      batchIdToNumberOfGaps.set(firstBatchIdWithGap, batchIdToNumberOfGaps.get(firstBatchIdWithGap) ?? 0)
+      batchIdToNumberOfGaps.set(firstBatchIdWithGap, (batchIdToNumberOfGaps.get(firstBatchIdWithGap) ?? 0) - 1)
 
       if (batchIdToNumberOfGaps.get(firstBatchIdWithGap) === 0) {
         batchIdToNumberOfGaps.delete(firstBatchIdWithGap)
