@@ -23,8 +23,7 @@ export async function scrapeUrlBatchWorkflow({ batchId, initialState }: ScrapeUr
   let numberOfIterations = 0
   let urls: string[] = initialState?.urls ?? []
 
-  // TODO: ensure we never run this handler whilst we're executing the core functionality
-  setHandler(startScrapingUrlSignal, async ({ url }) => {
+  setHandler(startScrapingUrlSignal, ({ url }) => {
     console.log('got new url', url)
     urls.push(url)
   })
@@ -41,7 +40,6 @@ export async function scrapeUrlBatchWorkflow({ batchId, initialState }: ScrapeUr
     console.log('signalled that I have a new gap')
   }
 
-  // TODO: ensure we never run this handler whilst we're executing the core functionality
   setHandler(stopScrapingUrlSignal, ({ url }) => {
     console.log('removing url from scrape list', url)
 
@@ -67,7 +65,7 @@ export async function scrapeUrlBatchWorkflow({ batchId, initialState }: ScrapeUr
 
     numberOfIterations += 1
 
-    // TODO: Document this estimate
+    // TODO: Replace with api to get event history when available
     const shouldContinueAsNew = numberOfIterations === 300
 
     if (shouldContinueAsNew) {
