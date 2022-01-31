@@ -34,9 +34,9 @@ To overcome this issue, we will record the batches with gaps in the batch id ass
 ### TODOs
 
 - [x] Cleanup with continueAsNew
-- [ ] Heuristic estimation guidelines for continueAsNew & event history
+- [x] Heuristic estimation guidelines for continueAsNew & event history
 - [ ] Activity implementation
-- [ ] Retry failed scrapes via activity heartbeating
+- [x] Retry failed scrapes via activity heartbeating
 - [x] Re-assign batch gaps after removing a url from a batch
 - [ ] What to do if you terminate the batch id singleton
 - [ ] How to handle failures inside batch id assigner singleton such that it doesn't crash it (e.g. via `handler.signal` etc)
