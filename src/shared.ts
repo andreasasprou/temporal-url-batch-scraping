@@ -1,4 +1,3 @@
-import type { WorkflowHandle } from '@temporalio/client'
 import type { ExternalWorkflowHandle } from '@temporalio/workflow/lib/workflow-handle'
 import { defineSignal } from '@temporalio/workflow'
 
@@ -18,28 +17,6 @@ export const getBatchProcessorWorkflowId = (batchId: number) => `batch-processor
 export const getScrapedUrlStateWorkflowId = (url: string) => `scraped-url-state-${VERSION}:${url}`
 
 const pingWorkflowSignal = defineSignal('internal_pingWorkflowSignal')
-
-type ErrorWithCode = Error & {
-  code?: 5
-}
-
-export async function isWorkflowRunning(handle: WorkflowHandle): Promise<boolean> {
-  try {
-    await handle.signal(pingWorkflowSignal)
-  } catch (error) {
-    // does code === 5 => NOT_FOUND, already completed, failed etc?
-    const isWorkflowNotRunningError = (error as ErrorWithCode).code === 5
-
-    if (isWorkflowNotRunningError) {
-      return false
-    }
-
-    // Unexpected error
-    throw error
-  }
-
-  return true
-}
 
 type ExternalWorkflowHandleError = Error & {
   type: 'ExternalWorkflowExecutionNotFound'

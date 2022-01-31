@@ -1,23 +1,25 @@
 import { Worker } from '@temporalio/worker'
 import * as activities from './activities'
-import { BATCH_ID_ASSIGNER_SINGLETON_WORKFLOW_ID, DEFAULT_TASK_QUEUE, isWorkflowRunning } from './shared'
+import { BATCH_ID_ASSIGNER_SINGLETON_WORKFLOW_ID, DEFAULT_TASK_QUEUE } from './shared'
 import { temporalClient } from './temporal-client'
 import { batchIdAssignerSingletonWorkflow } from './workflows'
 
 async function initializeBatchAssignerSingleton() {
-  // TODO: Think about race conditions
+  await temporalClient
+    .start(batchIdAssignerSingletonWorkflow, {
+      workflowId: BATCH_ID_ASSIGNER_SINGLETON_WORKFLOW_ID,
+      taskQueue: DEFAULT_TASK_QUEUE,
+      args: []
+    })
 
-  const handle = await temporalClient.getHandle(BATCH_ID_ASSIGNER_SINGLETON_WORKFLOW_ID)
+    .catch((error) => {
+      // TODO: Rely on code instead of message
+      if (error.message.includes('Workflow execution is already running')) {
+        return
+      }
 
-  if (await isWorkflowRunning(handle)) {
-    return
-  }
-
-  await temporalClient.start(batchIdAssignerSingletonWorkflow, {
-    workflowId: BATCH_ID_ASSIGNER_SINGLETON_WORKFLOW_ID,
-    taskQueue: DEFAULT_TASK_QUEUE,
-    args: []
-  })
+      throw error
+    })
 }
 
 async function run() {
