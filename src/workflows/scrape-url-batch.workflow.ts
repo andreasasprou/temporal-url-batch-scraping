@@ -1,4 +1,4 @@
-import { continueAsNew, getExternalWorkflowHandle, setHandler, sleep } from '@temporalio/workflow'
+import { condition, continueAsNew, getExternalWorkflowHandle, setHandler, sleep } from '@temporalio/workflow'
 import { BATCH_ID_ASSIGNER_SINGLETON_WORKFLOW_ID, SCRAPE_INTERVAL } from '../shared'
 import ms from 'ms'
 import { newGapSignal, startScrapingUrlSignal, stopScrapingUrlSignal } from '../signals'
@@ -48,18 +48,15 @@ export async function scrapeUrlBatchWorkflow({ batchId, initialState }: ScrapeUr
     void signalThatIHaveAGap()
   })
 
-  const scrapeUrls = async () => {
-    if (urls.length === 0) {
-      return
-    }
+  const scrapeUrls = async (urlsToScrape: string[]) => {
+    console.log('running activity to scrape urls', urlsToScrape)
 
-    console.log('running activity to scrape urls', urls)
-
-    await scrapeUrlsActivity({ urls, batchId })
+    await scrapeUrlsActivity({ urls: urlsToScrape, batchId })
   }
 
   while (true) {
-    await scrapeUrls()
+    await condition(() => urls.length > 0)
+    await scrapeUrls(urls)
 
     await sleep(ms(SCRAPE_INTERVAL))
 

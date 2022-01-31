@@ -37,11 +37,12 @@ export async function ensureBatchProcessorWorkflowForURL({ batchId, url }: Ensur
 }
 
 interface HeartbeatDetails {
-  failedUrlsInLastRun?: string[]
+  failedUrlsInLastAttempt?: string[]
 }
 
-export async function scrapeUrls({ urls: urlsFromFirstAttempt, batchId }: ScrapeUrlPayload) {
-  const failedUrlsFromLastAttempt = (Context.current().info as HeartbeatDetails | undefined)?.failedUrlsInLastRun
+export async function scrapeUrls({ urls: urlsFromFirstAttempt, batchId }: ScrapeUrlPayload): Promise<void> {
+  console.log(Context.current().info)
+  const failedUrlsFromLastAttempt = (Context.current().info.heartbeatDetails as HeartbeatDetails | undefined)?.failedUrlsInLastAttempt
 
   const urlsToProcess = failedUrlsFromLastAttempt ?? urlsFromFirstAttempt
 
@@ -54,25 +55,24 @@ export async function scrapeUrls({ urls: urlsFromFirstAttempt, batchId }: Scrape
   const failedUrls: string[] = []
 
   // TODO: use something like p-props to limit concurrency
-  await Promise.all(
+  await Promise.allSettled(
     urlsToProcess.map(async (url) => {
       try {
         await tryScrape(url)
 
         // Let Temporal know we're still alive for long-running activities (e.g. huge batch size)
-        await Context.current().heartbeat()
+        console.log('scraped ok')
       } catch (error) {
-        console.error(error)
+        console.error('scrape failed', error)
         failedUrls.push(url)
       }
+
+      Context.current().heartbeat({ failedUrlsInLastAttempt: failedUrls })
     })
   )
 
   if (failedUrls.length > 0) {
     console.log('failed urls', { failedUrls, batchId })
-    Context.current().heartbeat({
-      failedUrls
-    })
     throw new Error('Failed to process all urls')
   }
 }
