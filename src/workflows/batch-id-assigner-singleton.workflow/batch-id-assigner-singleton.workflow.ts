@@ -91,7 +91,7 @@ export async function batchIdAssignerSingletonWorkflow({ initialState }: Payload
     console.log('notified state workflow with new batch id', { url, nextBatchId })
   }
 
-  let urlsToAssign: string[] = []
+  const urlsToAssign: string[] = []
 
   setHandler(assignToBatchSignal, async ({ url }) => {
     urlsToAssign.push(url)
@@ -101,9 +101,14 @@ export async function batchIdAssignerSingletonWorkflow({ initialState }: Payload
 
   // Run forever (is there a better way of doing this in Temporal?)
   while (true) {
-    for (const url of urlsToAssign) {
-      await assignToBatchSignalHandler(url)
-      urlsToAssign = urlsToAssign.filter((item) => item !== url)
+    while (urlsToAssign.length > 0) {
+      const nextUrlToAssign = urlsToAssign.shift()
+
+      if (!nextUrlToAssign) {
+        break
+      }
+
+      await assignToBatchSignalHandler(nextUrlToAssign)
       numberOfUrlsHandled += 1
     }
 
