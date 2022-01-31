@@ -1,12 +1,21 @@
 import { getScrapedUrlStateWorkflowId, isExternalWorkflowRunning, MAX_BATCH_SIZE } from '../../shared'
 import { assignToBatchSignal, batchIdAssignedSignal, BatchIdAssignedSignalPayload, newGapSignal } from '../../signals'
-import { continueAsNew, getExternalWorkflowHandle, setHandler, sleep, proxyActivities } from '@temporalio/workflow'
+import {
+  continueAsNew,
+  getExternalWorkflowHandle,
+  setHandler,
+  sleep,
+  proxyActivities,
+  condition
+} from '@temporalio/workflow'
 import ms from 'ms'
 import { useBatchIsGapsState } from './batch-id-gaps.state'
 import { getBatchIdGapsQuery } from '../../queries'
 import type * as activities from '../../activities'
 
-const { ensureBatchProcessorWorkflowForURL: ensureBatchProcessorWorkflowForURLActivity } = proxyActivities<typeof activities>({
+const { ensureBatchProcessorWorkflowForURL: ensureBatchProcessorWorkflowForURLActivity } = proxyActivities<
+  typeof activities
+>({
   startToCloseTimeout: '1 minute'
 })
 
@@ -24,7 +33,7 @@ export async function batchIdAssignerSingletonWorkflow({ initialState }: Payload
 
   setHandler(getBatchIdGapsQuery, () => batchIdToNumberOfGaps)
 
-  let numberOfSignalsHandled = 0
+  let numberOfUrlsHandled = 0
   let numberOfUrlsInCurrentBatch = initialState?.numberOfUrlsInCurrentBatch ?? 0
   let currentBatchId: number = initialState?.currentBatchId ?? 0
 
@@ -65,7 +74,7 @@ export async function batchIdAssignerSingletonWorkflow({ initialState }: Payload
     })
   }
 
-  setHandler(assignToBatchSignal, async ({ url }) => {
+  const assignToBatchSignalHandler = async (url: string) => {
     console.log('requested new batch ID', url)
 
     const nextBatchId = getNextBatchId()
@@ -80,10 +89,25 @@ export async function batchIdAssignerSingletonWorkflow({ initialState }: Payload
     })
 
     console.log('notified state workflow with new batch id', { url, nextBatchId })
+  }
 
-    numberOfSignalsHandled += 1
+  let urlsToAssign: string[] = []
 
-    const shouldContinueAsNew = numberOfSignalsHandled === 1000
+  setHandler(assignToBatchSignal, async ({ url }) => {
+    urlsToAssign.push(url)
+  })
+
+  setHandler(newGapSignal, ({ batchId }) => incNumberOfGaps(batchId))
+
+  // Run forever (is there a better way of doing this in Temporal?)
+  while (true) {
+    for (const url of urlsToAssign) {
+      await assignToBatchSignalHandler(url)
+      urlsToAssign = urlsToAssign.filter((item) => item !== url)
+      numberOfUrlsHandled += 1
+    }
+
+    const shouldContinueAsNew = numberOfUrlsHandled === 1000
 
     if (shouldContinueAsNew) {
       await continueAsNew<typeof batchIdAssignerSingletonWorkflow>({
@@ -93,12 +117,8 @@ export async function batchIdAssignerSingletonWorkflow({ initialState }: Payload
         }
       })
     }
-  })
 
-  setHandler(newGapSignal, ({ batchId }) => incNumberOfGaps(batchId))
-
-  // Run forever (is there a better way of doing this in Temporal?)
-  while (true) {
-    await sleep(ms('100000days'))
+    // Run forever (is there a better way of doing this in Temporal?) @Roey
+    await condition(() => urlsToAssign.length > 0, ms('100000days'))
   }
 }
