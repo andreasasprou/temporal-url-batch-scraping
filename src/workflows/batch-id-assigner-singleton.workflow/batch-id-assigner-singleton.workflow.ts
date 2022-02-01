@@ -1,11 +1,12 @@
-import { getScrapedUrlStateWorkflowId, MAX_BATCH_SIZE } from '../../shared'
+import { getScrapedUrlStateWorkflowId, MAX_BATCH_SIZE, CONTINUE_AS_NEW_THRESHOLD } from '../../shared'
 import { assignToBatchSignal, batchIdAssignedSignal, BatchIdAssignedSignalPayload, newGapSignal } from '../../signals'
 import {
   continueAsNew,
   getExternalWorkflowHandle,
   setHandler,
   proxyActivities,
-  condition
+  condition,
+  sleep
 } from '@temporalio/workflow'
 import { useBatchIsGapsState } from './batch-id-gaps.state'
 import { getBatchIdGapsQuery } from '../../queries'
@@ -97,10 +98,14 @@ export async function batchIdAssignerSingletonWorkflow({ initialState }: Payload
 
   setHandler(newGapSignal, ({ batchId }) => incNumberOfGaps(batchId))
 
-  // Loop for MAX_ITERATIONS or after we've received no signals for a day, whichever is sooner.
-  // We continue as new if we've been inactive for a day to aid in the cleanup of old code versions.
-  for (let iteration = 1; iteration <= MAX_ITERATIONS; ++iteration) {
-    await condition(() => urlsToAssign.length > 0, '1 day')
+  let ContinueAsNewTimerFired = false
+  sleep(CONTINUE_AS_NEW_THRESHOLD).then(() => ContinueAsNewTimerFired = true )
+
+  // Loop for MAX_ITERATIONS or until our CONTINUE_AS_NEW_THRESHOLD timer fires, whichever is shorter.
+  // We continue-as-new at least every day to aid in the cleanup of old code versions.
+  for (let iteration = 1; iteration <= MAX_ITERATIONS && !ContinueAsNewTimerFired; ++iteration) {
+    // Avoid spinning too quickly if we have no work to do.
+    await condition(() => urlsToAssign.length > 0, '1 hour')
 
     while (urlsToAssign.length > 0) {
       const nextUrlToAssign = urlsToAssign.shift()

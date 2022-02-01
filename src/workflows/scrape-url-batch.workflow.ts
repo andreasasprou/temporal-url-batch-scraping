@@ -1,5 +1,5 @@
 import { continueAsNew, getExternalWorkflowHandle, setHandler, sleep, condition } from '@temporalio/workflow'
-import { BATCH_ID_ASSIGNER_SINGLETON_WORKFLOW_ID, SCRAPE_INTERVAL } from '../shared'
+import { BATCH_ID_ASSIGNER_SINGLETON_WORKFLOW_ID, SCRAPE_INTERVAL, CONTINUE_AS_NEW_THRESHOLD } from '../shared'
 import { newGapSignal, startScrapingUrlSignal, stopScrapingUrlSignal } from '../signals'
 
 import { proxyActivities } from '@temporalio/workflow'
@@ -58,13 +58,18 @@ export async function scrapeUrlBatchWorkflow({ batchId, initialState }: ScrapeUr
     await scrapeUrlsActivity({ urls, batchId })
   }
 
-  // Loop for MAX_ITERATIONS or after we've had no work to do for a day, whichever is sooner.
-  // We continue as new if we've been inactive for a day to aid in the cleanup of old code versions.
-  for (let iteration = 1; iteration <= MAX_ITERATIONS; ++iteration) {
-    await condition(() => urls.length > 0, '1 day')
+  let ContinueAsNewTimerFired = false
+  sleep(CONTINUE_AS_NEW_THRESHOLD).then(() => ContinueAsNewTimerFired = true )
 
-    await scrapeUrls()
+  // Loop for MAX_ITERATIONS or until our CONTINUE_AS_NEW_THRESHOLD timer fires, whichever is shorter.
+  // We continue-as-new at least every day to aid in the cleanup of old code versions.
+  for (let iteration = 1; iteration <= MAX_ITERATIONS && !ContinueAsNewTimerFired; ++iteration) {
+    // Avoid spinning too quickly if we have no work to do.
+    await condition(() => urls.length > 0, '1 hour')
 
+    if (urls.length) {
+      await scrapeUrls()
+    }
     await sleep(SCRAPE_INTERVAL)
   }
 
