@@ -1,12 +1,13 @@
-import { continueAsNew, getExternalWorkflowHandle, setHandler, sleep } from '@temporalio/workflow'
+import { continueAsNew, getExternalWorkflowHandle, setHandler, sleep, condition } from '@temporalio/workflow'
 import { BATCH_ID_ASSIGNER_SINGLETON_WORKFLOW_ID, SCRAPE_INTERVAL } from '../shared'
-import ms from 'ms'
 import { newGapSignal, startScrapingUrlSignal, stopScrapingUrlSignal } from '../signals'
 
 import { proxyActivities } from '@temporalio/workflow'
 // Only import the activity types
 import type * as activities from '../activities'
 import { getUrlsInBatchQuery } from '../queries'
+
+const MAX_ITERATIONS = 1000
 
 const { scrapeUrls: scrapeUrlsActivity } = proxyActivities<typeof activities>({
   startToCloseTimeout: '1 minute'
@@ -20,7 +21,6 @@ interface ScrapeUrlBatchWorkflowPayload {
 }
 
 export async function scrapeUrlBatchWorkflow({ batchId, initialState }: ScrapeUrlBatchWorkflowPayload) {
-  let numberOfIterations = 0
   let urls: string[] = initialState?.urls ?? []
 
   setHandler(startScrapingUrlSignal, ({ url }) => {
@@ -58,23 +58,20 @@ export async function scrapeUrlBatchWorkflow({ batchId, initialState }: ScrapeUr
     await scrapeUrlsActivity({ urls, batchId })
   }
 
-  while (true) {
+  // Loop for MAX_ITERATIONS or after we've had no work to do for a day, whichever is sooner.
+  // We continue as new if we've been inactive for a day to aid in the cleanup of old code versions.
+  for (let iteration = 1; iteration <= MAX_ITERATIONS; ++iteration) {
+    await condition(() => urls.length > 0, '1 day')
+
     await scrapeUrls()
 
-    await sleep(ms(SCRAPE_INTERVAL))
-
-    numberOfIterations += 1
-
-    // TODO: Replace with api to get event history when available
-    const shouldContinueAsNew = numberOfIterations === 300
-
-    if (shouldContinueAsNew) {
-      await continueAsNew<typeof scrapeUrlBatchWorkflow>({
-        batchId,
-        initialState: {
-          urls
-        }
-      })
-    }
+    await sleep(SCRAPE_INTERVAL)
   }
+
+  await continueAsNew<typeof scrapeUrlBatchWorkflow>({
+    batchId,
+    initialState: {
+      urls
+    }
+  })
 }

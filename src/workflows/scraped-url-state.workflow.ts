@@ -2,7 +2,6 @@ import { condition, getExternalWorkflowHandle, setHandler } from '@temporalio/wo
 
 import { BATCH_ID_ASSIGNER_SINGLETON_WORKFLOW_ID, getBatchProcessorWorkflowId } from '../shared'
 import { batchIdAssignedSignal, assignToBatchSignal, stopScrapingUrlSignal } from '../signals'
-import ms from 'ms'
 
 interface Payload {
   url: string
