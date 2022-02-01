@@ -48,14 +48,10 @@ export async function scrapeUrlBatchWorkflow({ batchId, initialState }: ScrapeUr
     void signalThatIHaveAGap()
   })
 
-  const scrapeUrls = async () => {
-    if (urls.length === 0) {
-      return
-    }
+  const scrapeUrls = async (urlsToScrape: string[]) => {
+    console.log('running activity to scrape urls', urlsToScrape)
 
-    console.log('running activity to scrape urls', urls)
-
-    await scrapeUrlsActivity({ urls, batchId })
+    await scrapeUrlsActivity({ urls: urlsToScrape, batchId })
   }
 
   let ContinueAsNewTimerFired = false

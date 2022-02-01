@@ -14,11 +14,11 @@ import assert from 'assert'
 
 const urls = [
   'https://url1.com',
-  'https://url2.com',
-  'https://url3.com',
-  'https://url4.com',
-  'https://url5.com',
-  'https://url6.com'
+  'https://url2.com'
+  // 'https://url3.com',
+  // 'https://url4.com',
+  // 'https://url5.com',
+  // 'https://url6.com'
 ]
 
 const sleep = (time: string) => new Promise((res) => setTimeout(res, ms(time)))
@@ -65,6 +65,8 @@ async function run() {
       url: firstUrl
     })
   }
+
+  return
 
   await sleep('38s')
 
