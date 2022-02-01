@@ -9,6 +9,7 @@ import { scrapedUrlStateWorkflow } from './workflows'
 import { stopScrapingUrlSignal } from './signals'
 import ms from 'ms'
 import { getBatchIdGapsQuery } from './queries'
+import { TemporalGRPCError } from './shared'
 import assert from 'assert'
 
 const urls = [
@@ -31,17 +32,25 @@ const getBatchIdsMapFromWorkflow = async () => {
 async function run() {
   await Promise.all(
     urls.map(async (url) => {
-      const handle = await temporalClient.start(scrapedUrlStateWorkflow, {
-        args: [
-          {
-            url
-          }
-        ],
-        taskQueue: DEFAULT_TASK_QUEUE,
-        workflowId: getScrapedUrlStateWorkflowId(url)
-      })
+      try {
+        const handle = await temporalClient.start(scrapedUrlStateWorkflow, {
+          args: [
+            {
+              url
+            }
+          ],
+          taskQueue: DEFAULT_TASK_QUEUE,
+          workflowId: getScrapedUrlStateWorkflowId(url)
+        })
 
-      console.log(`Started workflow ${handle.workflowId} for url "${url}"`)
+        console.log(`Started workflow ${handle.workflowId} for url "${url}"`)
+      } catch (error) {
+        if ((error as TemporalGRPCError).code == 6) {
+          console.log('workflow already running')
+        } else {
+          console.log('error', error)
+        }
+      }
     })
   )
 

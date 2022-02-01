@@ -30,6 +30,8 @@ services:
       - ES_VERSION=v7
       - PROMETHEUS_ENDPOINT=0.0.0.0:8000
     image: temporalio/auto-setup:1.14.0
+    ports:
+      - 7233:7233
   temporal-admin-tools:
     depends_on:
       - temporal

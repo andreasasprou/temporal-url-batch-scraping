@@ -1,12 +1,13 @@
-import { continueAsNew, getExternalWorkflowHandle, setHandler, sleep } from '@temporalio/workflow'
-import { BATCH_ID_ASSIGNER_SINGLETON_WORKFLOW_ID, SCRAPE_INTERVAL } from '../shared'
-import ms from 'ms'
+import { continueAsNew, getExternalWorkflowHandle, setHandler, sleep, condition } from '@temporalio/workflow'
+import { BATCH_ID_ASSIGNER_SINGLETON_WORKFLOW_ID, SCRAPE_INTERVAL, CONTINUE_AS_NEW_THRESHOLD } from '../shared'
 import { newGapSignal, startScrapingUrlSignal, stopScrapingUrlSignal } from '../signals'
 
 import { proxyActivities } from '@temporalio/workflow'
 // Only import the activity types
 import type * as activities from '../activities'
 import { getUrlsInBatchQuery } from '../queries'
+
+const MAX_ITERATIONS = 1000
 
 const { scrapeUrls: scrapeUrlsActivity } = proxyActivities<typeof activities>({
   startToCloseTimeout: '1 minute'
@@ -20,7 +21,6 @@ interface ScrapeUrlBatchWorkflowPayload {
 }
 
 export async function scrapeUrlBatchWorkflow({ batchId, initialState }: ScrapeUrlBatchWorkflowPayload) {
-  let numberOfIterations = 0
   let urls: string[] = initialState?.urls ?? []
 
   setHandler(startScrapingUrlSignal, ({ url }) => {
@@ -58,23 +58,25 @@ export async function scrapeUrlBatchWorkflow({ batchId, initialState }: ScrapeUr
     await scrapeUrlsActivity({ urls, batchId })
   }
 
-  while (true) {
-    await scrapeUrls()
+  let ContinueAsNewTimerFired = false
+  sleep(CONTINUE_AS_NEW_THRESHOLD).then(() => ContinueAsNewTimerFired = true )
 
-    await sleep(ms(SCRAPE_INTERVAL))
+  // Loop for MAX_ITERATIONS or until our CONTINUE_AS_NEW_THRESHOLD timer fires, whichever is shorter.
+  // We continue-as-new at least every day to aid in the cleanup of old code versions.
+  for (let iteration = 1; iteration <= MAX_ITERATIONS && !ContinueAsNewTimerFired; ++iteration) {
+    // Avoid spinning too quickly if we have no work to do.
+    await condition(() => urls.length > 0, '1 hour')
 
-    numberOfIterations += 1
-
-    // TODO: Replace with api to get event history when available
-    const shouldContinueAsNew = numberOfIterations === 300
-
-    if (shouldContinueAsNew) {
-      await continueAsNew<typeof scrapeUrlBatchWorkflow>({
-        batchId,
-        initialState: {
-          urls
-        }
-      })
+    if (urls.length) {
+      await scrapeUrls()
     }
+    await sleep(SCRAPE_INTERVAL)
   }
+
+  await continueAsNew<typeof scrapeUrlBatchWorkflow>({
+    batchId,
+    initialState: {
+      urls
+    }
+  })
 }
