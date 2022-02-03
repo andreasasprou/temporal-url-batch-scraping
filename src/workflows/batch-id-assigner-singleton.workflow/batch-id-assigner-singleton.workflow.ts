@@ -1,8 +1,7 @@
-import { getScrapedUrlStateWorkflowId, MAX_BATCH_SIZE, CONTINUE_AS_NEW_THRESHOLD } from '../../shared'
-import { assignToBatchSignal, batchIdAssignedSignal, BatchIdAssignedSignalPayload, newGapSignal } from '../../signals'
+import { MAX_BATCH_SIZE, CONTINUE_AS_NEW_THRESHOLD } from '../../shared'
+import { assignToBatchSignal, newGapSignal } from '../../signals'
 import {
   continueAsNew,
-  getExternalWorkflowHandle,
   setHandler,
   proxyActivities,
   condition,
@@ -27,6 +26,11 @@ interface Payload {
   }
 }
 
+type BatchSlice = {
+  batchId: number,
+  count: number
+}
+
 export async function batchIdAssignerSingletonWorkflow({ initialState }: Payload = {}) {
   const { incNumberOfGaps, pullFirstBatchIdWithGap, batchIdToNumberOfGaps } = useBatchIsGapsState()
 
@@ -40,57 +44,35 @@ export async function batchIdAssignerSingletonWorkflow({ initialState }: Payload
     numberOfUrlsInCurrentBatch = 0
   }
 
-  const getNextBatchId = (): number => {
+  const getBatchNextBatchSlice = (requestedCount: number): BatchSlice => {
     const batchIdWithGap = pullFirstBatchIdWithGap()
 
     if (batchIdWithGap) {
-      console.log('found batch with gap, attempting to fill', batchIdWithGap)
-      return batchIdWithGap
+      const block = { batchId: batchIdWithGap!, count: 1 }
+      console.log('found gap batch slice', block)
+      
+      return { batchId: batchIdWithGap, count: 1 }
     }
 
     if (currentBatchId === undefined || numberOfUrlsInCurrentBatch >= MAX_BATCH_SIZE) {
       cycleToNewBatch()
     }
 
-    numberOfUrlsInCurrentBatch += 1
-
-    return currentBatchId!
-  }
-
-  const notifyStateWorkflowWithItsNewBatchId = async ({ url, batchId }: BatchIdAssignedSignalPayload) => {
-    const handle = getExternalWorkflowHandle(getScrapedUrlStateWorkflowId(url))
-
-    return handle.signal(batchIdAssignedSignal, {
-        batchId,
-        url
-    })  
-  }
-
-  const assignToBatchSignalHandler = async (url: string | undefined) => {
-    if (!url) {
-      return
+    if (requestedCount > MAX_BATCH_SIZE) {
+      requestedCount = MAX_BATCH_SIZE
     }
-
-    console.log('requested new batch ID', url)
-
-    const nextBatchId = getNextBatchId()
-
-    console.log('next batch id', { url, nextBatchId })
-
-    await ensureBatchProcessorWorkflowForURLActivity({ url, batchId: nextBatchId })
+    let availableCount = MAX_BATCH_SIZE - numberOfUrlsInCurrentBatch
+    let count = requestedCount <= availableCount ? requestedCount : availableCount
     
-    try {
-      await notifyStateWorkflowWithItsNewBatchId({
-        url,
-        batchId: nextBatchId
-      })
-    } catch (error) {
-      // TODO: Unregister URL from batch here as compensation?
-      console.log('⚠️ failed to signal state workflow', { error, url })
-    }
+    numberOfUrlsInCurrentBatch += count
+
+    const slice = { batchId: currentBatchId!, count }
+    console.log('found batch slice', { requested: requestedCount, available: availableCount, assigned: slice })
+
+    return slice
   }
 
-  const urlsToAssign: string[] = []
+  let urlsToAssign: string[] = []
 
   setHandler(assignToBatchSignal, async ({ url }) => {
     urlsToAssign.push(url)
@@ -104,12 +86,17 @@ export async function batchIdAssignerSingletonWorkflow({ initialState }: Payload
   // Loop for MAX_ITERATIONS or until our CONTINUE_AS_NEW_THRESHOLD timer fires, whichever is shorter.
   // We continue-as-new at least every day to aid in the cleanup of old code versions.
   for (let iteration = 1; iteration <= MAX_ITERATIONS && !ContinueAsNewTimerFired; ++iteration) {
-    // Avoid spinning too quickly if we have no work to do.
-    await condition(() => urlsToAssign.length > 0, '1 hour')
+    // Wait up to 10 seconds to let a batch build up
+    await condition(() => urlsToAssign.length >= MAX_BATCH_SIZE, '10s')
 
-    while (urlsToAssign.length > 0) {
-      const nextUrlToAssign = urlsToAssign.shift()
-      await assignToBatchSignalHandler(nextUrlToAssign)
+    while (urlsToAssign.length) {
+      const slice = getBatchNextBatchSlice(urlsToAssign.length)
+      const urls = urlsToAssign.splice(0, slice.count)
+      const batchId = slice.batchId
+  
+      console.log('assignment', { urls, batchId, urlsLeft: urlsToAssign.length })
+  
+      await ensureBatchProcessorWorkflowForURLActivity({ urls, batchId })
     }
   }
 

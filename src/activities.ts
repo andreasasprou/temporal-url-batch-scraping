@@ -5,7 +5,7 @@ import { DEFAULT_TASK_QUEUE, getBatchProcessorWorkflowId } from './shared'
 
 interface EnsureBatchProcessorWorkflowForURLPayload {
   batchId: number
-  url: string
+  urls: string[]
 }
 
 interface ScrapeUrlPayload {
@@ -17,7 +17,7 @@ async function tryScrape(url: string) {
   console.log('scraping url', url)
 }
 
-export async function ensureBatchProcessorWorkflowForURL({ batchId, url }: EnsureBatchProcessorWorkflowForURLPayload) {
+export async function ensureBatchProcessorWorkflowForURL({ batchId, urls }: EnsureBatchProcessorWorkflowForURLPayload) {
   await temporalClient.signalWithStart(
     scrapeUrlBatchWorkflow,
     {
@@ -25,7 +25,7 @@ export async function ensureBatchProcessorWorkflowForURL({ batchId, url }: Ensur
       args: [{ batchId }],
       taskQueue: DEFAULT_TASK_QUEUE,
       signal: startScrapingUrlSignal,
-      signalArgs: [{ url }],
+      signalArgs: [{ urls }],
     }
   )
 }

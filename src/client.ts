@@ -2,6 +2,7 @@ import {
   BATCH_ID_ASSIGNER_SINGLETON_WORKFLOW_ID,
   DEFAULT_TASK_QUEUE,
   getScrapedUrlStateWorkflowId,
+  MAX_BATCH_SIZE,
   SCRAPE_INTERVAL
 } from './shared'
 import { temporalClient } from './temporal-client'
@@ -12,14 +13,7 @@ import { getBatchIdGapsQuery } from './queries'
 import { TemporalGRPCError } from './shared'
 import assert from 'assert'
 
-const urls = [
-  'https://url1.com',
-  'https://url2.com',
-  'https://url3.com',
-  'https://url4.com',
-  'https://url5.com',
-  'https://url6.com'
-]
+const urls = Array(750).fill(null).map((_, i) => 'https://url' + i + '.com')
 
 const sleep = (time: string) => new Promise((res) => setTimeout(res, ms(time)))
 
@@ -30,7 +24,9 @@ const getBatchIdsMapFromWorkflow = async () => {
 }
 
 async function run() {
-  await Promise.all(
+  console.time('assignment')
+
+  await Promise.allSettled(
     urls.map(async (url) => {
       try {
         const handle = await temporalClient.start(scrapedUrlStateWorkflow, {
@@ -44,6 +40,8 @@ async function run() {
         })
 
         console.log(`Started workflow ${handle.workflowId} for url "${url}"`)
+
+        await handle.result()
       } catch (error) {
         if ((error as TemporalGRPCError).code == 6) {
           console.log('workflow already running')
@@ -53,6 +51,10 @@ async function run() {
       }
     })
   )
+
+  console.timeEnd('assignment')
+
+  return
 
   const stopScraping = async () => {
     const firstUrl = urls[0]

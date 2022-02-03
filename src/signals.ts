@@ -4,7 +4,9 @@ type PayloadWithUrl = {
   url: string
 }
 
-export type ScrapeNewUrlSignalPayload = PayloadWithUrl
+export type ScrapeNewUrlSignalPayload = {
+  urls: string[]
+}
 
 export const startScrapingUrlSignal = defineSignal<[ScrapeNewUrlSignalPayload]>('startScrapingUrlSignal')
 
