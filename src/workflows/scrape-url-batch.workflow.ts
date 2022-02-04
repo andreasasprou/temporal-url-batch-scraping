@@ -84,8 +84,8 @@ export async function scrapeUrlBatchWorkflow({ batchId, initialState }: BatchWor
   let TimeToContinueAsNew = false
   sleep(CONTINUE_AS_NEW_THRESHOLD).then(() => TimeToContinueAsNew = true)
 
-  // Loop for MAX_ITERATIONS or until our CONTINUE_AS_NEW_THRESHOLD timer fires, whichever is shorter.
   for (let iteration = 1; iteration <= MAX_ITERATIONS; ++iteration) {
+    // Wait until we have some work to do or it's time to continue as new.
     await condition(() => items.length > 0 || itemsAddedToNotify.length > 0 || itemsRemovedToNotify.length > 0 || TimeToContinueAsNew)
     if (TimeToContinueAsNew) { break }
 
