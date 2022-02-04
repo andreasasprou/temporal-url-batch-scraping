@@ -1,5 +1,5 @@
 import { MAX_BATCH_SIZE, CONTINUE_AS_NEW_THRESHOLD } from '../../shared'
-import { assignToBatchSignal, newGapSignal } from '../../signals'
+import { assignToBatchSignal, removedItemFromBatchSignal } from '../../signals'
 import {
   continueAsNew,
   setHandler,
@@ -7,13 +7,13 @@ import {
   condition,
   sleep
 } from '@temporalio/workflow'
-import { useBatchIsGapsState } from './batch-id-gaps.state'
+import { useBatchIdGapsState } from './batch-id-gaps.state'
 import { getBatchIdGapsQuery } from '../../queries'
 import type * as activities from '../../activities'
 
 const MAX_ITERATIONS = 1000
 
-const { ensureBatchProcessorWorkflowForURL: ensureBatchProcessorWorkflowForURLActivity } = proxyActivities<
+const { ensureBatchProcessorWorkflowForItems: ensureBatchProcessorWorkflowForItems } = proxyActivities<
   typeof activities
 >({
   startToCloseTimeout: '1 minute'
@@ -21,7 +21,7 @@ const { ensureBatchProcessorWorkflowForURL: ensureBatchProcessorWorkflowForURLAc
 
 interface Payload {
   initialState?: {
-    numberOfUrlsInCurrentBatch: number
+    currentBatchItemCount: number
     currentBatchId: number | undefined
   }
 }
@@ -32,16 +32,16 @@ type BatchSlice = {
 }
 
 export async function batchIdAssignerSingletonWorkflow({ initialState }: Payload = {}) {
-  const { incNumberOfGaps, pullFirstBatchIdWithGap, batchIdToNumberOfGaps } = useBatchIsGapsState()
+  const { incNumberOfGaps, pullFirstBatchIdWithGap, batchIdToNumberOfGaps } = useBatchIdGapsState()
 
   setHandler(getBatchIdGapsQuery, () => batchIdToNumberOfGaps)
 
-  let numberOfUrlsInCurrentBatch = initialState?.numberOfUrlsInCurrentBatch ?? 0
   let currentBatchId: number = initialState?.currentBatchId ?? 0
+  let currentBatchItemCount: number = initialState?.currentBatchItemCount ?? 0
 
   const cycleToNewBatch = () => {
     currentBatchId += 1
-    numberOfUrlsInCurrentBatch = 0
+    currentBatchItemCount = 0
   }
 
   const getBatchNextBatchSlice = (requestedCount: number): BatchSlice => {
@@ -54,56 +54,60 @@ export async function batchIdAssignerSingletonWorkflow({ initialState }: Payload
       return { batchId: batchIdWithGap, count: 1 }
     }
 
-    if (currentBatchId === undefined || numberOfUrlsInCurrentBatch >= MAX_BATCH_SIZE) {
+    if (currentBatchId === undefined || currentBatchItemCount >= MAX_BATCH_SIZE) {
       cycleToNewBatch()
     }
 
     if (requestedCount > MAX_BATCH_SIZE) {
       requestedCount = MAX_BATCH_SIZE
     }
-    let availableCount = MAX_BATCH_SIZE - numberOfUrlsInCurrentBatch
+    let availableCount = MAX_BATCH_SIZE - currentBatchItemCount
     let count = requestedCount <= availableCount ? requestedCount : availableCount
     
-    numberOfUrlsInCurrentBatch += count
+    currentBatchItemCount += count
 
     const slice = { batchId: currentBatchId!, count }
+    
     console.log('found batch slice', { requested: requestedCount, available: availableCount, assigned: slice })
 
     return slice
   }
 
-  let urlsToAssign: string[] = []
+  let itemsToAssign: string[] = []
 
-  setHandler(assignToBatchSignal, async ({ url }) => {
-    urlsToAssign.push(url)
+  setHandler(assignToBatchSignal, async ({ item }) => {
+    itemsToAssign.push(item)
   })
 
-  setHandler(newGapSignal, ({ batchId }) => incNumberOfGaps(batchId))
+  setHandler(removedItemFromBatchSignal, ({ batchId }) => incNumberOfGaps(batchId))
 
-  let ContinueAsNewTimerFired = false
-  sleep(CONTINUE_AS_NEW_THRESHOLD).then(() => ContinueAsNewTimerFired = true )
-
-  // Loop for MAX_ITERATIONS or until our CONTINUE_AS_NEW_THRESHOLD timer fires, whichever is shorter.
   // We continue-as-new at least every day to aid in the cleanup of old code versions.
-  for (let iteration = 1; iteration <= MAX_ITERATIONS && !ContinueAsNewTimerFired; ++iteration) {
-    // Wait up to 10 seconds to let a batch build up
-    await condition(() => urlsToAssign.length >= MAX_BATCH_SIZE, '10s')
+  let TimeToContinueAsNew = false
+  sleep(CONTINUE_AS_NEW_THRESHOLD).then(() => TimeToContinueAsNew = true)
 
-    while (urlsToAssign.length) {
-      const slice = getBatchNextBatchSlice(urlsToAssign.length)
-      const urls = urlsToAssign.splice(0, slice.count)
+  for (let iteration = 1; iteration <= MAX_ITERATIONS; ++iteration) {
+    // Wait till we get at least one item to assign or it's time to continue as new.
+    await condition(() => itemsToAssign.length > 0 || TimeToContinueAsNew)
+    if (TimeToContinueAsNew) { break }
+
+    // Wait a little to let a batch build up
+    await condition(() => itemsToAssign.length >= MAX_BATCH_SIZE, '10s')
+    
+    while (itemsToAssign.length) {
+      const slice = getBatchNextBatchSlice(itemsToAssign.length)
+      const items = itemsToAssign.splice(0, slice.count)
       const batchId = slice.batchId
   
-      console.log('assignment', { urls, batchId, urlsLeft: urlsToAssign.length })
+      console.log('assignment', { items, batchId, itemsLeft: itemsToAssign.length })
   
-      await ensureBatchProcessorWorkflowForURLActivity({ urls, batchId })
+      await ensureBatchProcessorWorkflowForItems({ items, batchId })
     }
   }
 
   await continueAsNew<typeof batchIdAssignerSingletonWorkflow>({
     initialState: {
       currentBatchId,
-      numberOfUrlsInCurrentBatch
+      currentBatchItemCount
     }
   })
 }

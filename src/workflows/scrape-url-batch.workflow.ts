@@ -1,11 +1,11 @@
-import { continueAsNew, getExternalWorkflowHandle, setHandler, sleep, condition } from '@temporalio/workflow'
+import { continueAsNew, getExternalWorkflowHandle, setHandler, sleep, condition, ExternalWorkflowHandle } from '@temporalio/workflow'
 import { BATCH_ID_ASSIGNER_SINGLETON_WORKFLOW_ID, SCRAPE_INTERVAL, CONTINUE_AS_NEW_THRESHOLD, getScrapedUrlStateWorkflowId } from '../shared'
-import { newGapSignal, startScrapingUrlSignal, stopScrapingUrlSignal, batchIdAssignedSignal, BatchIdAssignedSignalPayload } from '../signals'
+import { addedToBatchSignal, removedItemFromBatchSignal, addItemsToBatchSignal, removeItemsFromBatchSignal } from '../signals'
 
 import { proxyActivities } from '@temporalio/workflow'
 // Only import the activity types
 import type * as activities from '../activities'
-import { getUrlsInBatchQuery } from '../queries'
+import { getItemsInBatchQuery } from '../queries'
 
 const MAX_ITERATIONS = 1000
 const NOTIFICATION_BATCH_SIZE = 50
@@ -14,87 +14,104 @@ const { scrapeUrls: scrapeUrlsActivity } = proxyActivities<typeof activities>({
   startToCloseTimeout: '1 minute'
 })
 
-interface ScrapeUrlBatchWorkflowPayload {
+interface BatchWorkflowPayload {
   batchId: number
   initialState?: {
-    urlsToScrape: string[]
-    urlsToNotify: string[]
+    items: string[]
+    itemsAddedToNotify: string[]
+    itemsRemovedToNotify: string[]
   }
 }
 
-export async function scrapeUrlBatchWorkflow({ batchId, initialState }: ScrapeUrlBatchWorkflowPayload) {
-  let urlsToScrape: string[] = initialState?.urlsToScrape ?? []
-  let urlsToNotify: string[] = initialState?.urlsToNotify ?? []
+export async function scrapeUrlBatchWorkflow({ batchId, initialState }: BatchWorkflowPayload) {
+  let items: string[] = initialState?.items ?? []
+  let itemsAddedToNotify: string[] = initialState?.itemsAddedToNotify ?? []
+  let itemsRemovedToNotify: string[] = initialState?.itemsRemovedToNotify ?? []
 
-  const notifyStateWorkflowWithItsNewBatchId = async (url: string) => {
-    const handle = getExternalWorkflowHandle(getScrapedUrlStateWorkflowId(url))
+  const notifyItemAdded = async (item: string) => {
+    console.log('notify item added', item)
 
-    console.log('notify url state workflow', { url, batchId })
-
-    return handle.signal(batchIdAssignedSignal, {
+    await handleForItem(item).signal(addedToBatchSignal, {
       batchId,
-      url
     })
   }
 
-  setHandler(startScrapingUrlSignal, async ({ urls }) => {
-    console.log('got new urls', urls)
-    
-    urlsToScrape.push(...urls)
-    urlsToNotify.push(...urls)
-  })
+  const notifyItemRemoved = async (item: string) => {
+    console.log('notify item removed', item)
 
-  setHandler(getUrlsInBatchQuery, () => urlsToScrape)
-
-  const signalThatIHaveAGap = async () => {
-    const handle = getExternalWorkflowHandle(BATCH_ID_ASSIGNER_SINGLETON_WORKFLOW_ID)
-
-    return handle.signal(newGapSignal, {
+    await handleForAssigner().signal(removedItemFromBatchSignal, {
       batchId
     })
   }
 
-  setHandler(stopScrapingUrlSignal, async ({ url }) => {
-    console.log('removing url from scrape list', url)
+  setHandler(getItemsInBatchQuery, () => items)
 
-    urlsToScrape = urlsToScrape.filter((oldUrl) => oldUrl !== url)
-
-    // TODO: error handling
-    signalThatIHaveAGap()
+  setHandler(addItemsToBatchSignal, async ({ items }) => {
+    console.log('items added', items)
+    
+    items.push(...items)
+    itemsAddedToNotify.push(...items)
   })
 
-  const scrapeUrls = async () => {
-    console.log('running activity to scrape urls', urlsToScrape)
+  setHandler(removeItemsFromBatchSignal, async ({ items }) => {
+    console.log('items removed', items)
 
-    await scrapeUrlsActivity({ urls: urlsToScrape, batchId })
+    items = items.filter((i) => !items.includes(i))
+    
+    itemsRemovedToNotify.push(...items)
+  })
+
+  const handleForAssigner = (): ExternalWorkflowHandle => {
+    return getExternalWorkflowHandle(BATCH_ID_ASSIGNER_SINGLETON_WORKFLOW_ID)
   }
 
-  let ContinueAsNewTimerFired = false
-  sleep(CONTINUE_AS_NEW_THRESHOLD).then(() => ContinueAsNewTimerFired = true )
+  const handleForItem = (item: string): ExternalWorkflowHandle => {
+    return getExternalWorkflowHandle(getScrapedUrlStateWorkflowId(item))
+  }
+
+  const scrapeUrls = async () => {
+    await scrapeUrlsActivity({ urls: items })
+  }
+
+  const processBatch = async() => {
+    console.log('processing batch', items)
+
+    await scrapeUrls()
+    await sleep(SCRAPE_INTERVAL)
+  }
+
+  // We continue-as-new at least every day to aid in the cleanup of old code versions.
+  let TimeToContinueAsNew = false
+  sleep(CONTINUE_AS_NEW_THRESHOLD).then(() => TimeToContinueAsNew = true)
 
   // Loop for MAX_ITERATIONS or until our CONTINUE_AS_NEW_THRESHOLD timer fires, whichever is shorter.
-  // We continue-as-new at least every day to aid in the cleanup of old code versions.
-  for (let iteration = 1; iteration <= MAX_ITERATIONS && !ContinueAsNewTimerFired; ++iteration) {
-    await condition(() => urlsToScrape.length > 0 || urlsToNotify.length > 0, '1h')
+  for (let iteration = 1; iteration <= MAX_ITERATIONS; ++iteration) {
+    await condition(() => items.length > 0 || itemsAddedToNotify.length > 0 || itemsRemovedToNotify.length > 0 || TimeToContinueAsNew)
+    if (TimeToContinueAsNew) { break }
 
-    while (urlsToNotify.length) {
-      const notifications = urlsToNotify.splice(0, NOTIFICATION_BATCH_SIZE).map(notifyStateWorkflowWithItsNewBatchId)
+    while (itemsAddedToNotify.length) {
+      const notifications = itemsAddedToNotify.splice(0, NOTIFICATION_BATCH_SIZE).map(notifyItemAdded)
       // TODO: Check for failures here
-      let results = await Promise.allSettled(notifications)
-      console.log('notification results', results)
+      await Promise.allSettled(notifications)
     }
 
-    if (urlsToScrape.length) {
-      await scrapeUrls()
-      await sleep(SCRAPE_INTERVAL)
+    while (itemsRemovedToNotify.length) {
+      const notifications = itemsRemovedToNotify.splice(0, NOTIFICATION_BATCH_SIZE).map(notifyItemRemoved)
+      // TODO: Check for failures here
+      await Promise.allSettled(notifications)
+    }
+
+    if (items.length) {
+      await processBatch()
     }
   }
 
   await continueAsNew<typeof scrapeUrlBatchWorkflow>({
     batchId,
     initialState: {
-      urlsToScrape,
-      urlsToNotify
+      items,
+      itemsAddedToNotify,
+      itemsRemovedToNotify
     }
   })
 }

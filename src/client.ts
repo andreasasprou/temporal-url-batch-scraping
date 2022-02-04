@@ -7,13 +7,13 @@ import {
 } from './shared'
 import { temporalClient } from './temporal-client'
 import { scrapedUrlStateWorkflow } from './workflows'
-import { stopScrapingUrlSignal } from './signals'
+import { removeItemsFromBatchSignal } from './signals'
 import ms from 'ms'
 import { getBatchIdGapsQuery } from './queries'
 import { TemporalGRPCError } from './shared'
 import assert from 'assert'
 
-const urls = Array(750).fill(null).map((_, i) => 'https://url' + i + '.com')
+const urls = Array(500).fill(null).map((_, i) => 'https://url' + i + '.com')
 
 const sleep = (time: string) => new Promise((res) => setTimeout(res, ms(time)))
 
@@ -63,8 +63,8 @@ async function run() {
 
     const firstUrlHandle = await temporalClient.getHandle(getScrapedUrlStateWorkflowId(firstUrl))
 
-    await firstUrlHandle.signal(stopScrapingUrlSignal, {
-      url: firstUrl
+    await firstUrlHandle.signal(removeItemsFromBatchSignal, {
+      items: [firstUrl]
     })
   }
 
