@@ -1,82 +1,54 @@
-import { condition, getExternalWorkflowHandle, setHandler } from '@temporalio/workflow'
+import { condition, getExternalWorkflowHandle, setHandler, isCancellation, CancellationScope } from '@temporalio/workflow'
 
 import { BATCH_ID_ASSIGNER_SINGLETON_WORKFLOW_ID, getBatchProcessorWorkflowId } from '../shared'
-import { batchIdAssignedSignal, assignToBatchSignal, stopScrapingUrlSignal } from '../signals'
+import { addedToBatchSignal, assignToBatchSignal, removeItemsFromBatchSignal } from '../signals'
 
 interface Payload {
   url: string
 }
 
-async function requestBatchIdForUrl({ url }: Pick<Payload, 'url'>) {
-  const handle = await getExternalWorkflowHandle(BATCH_ID_ASSIGNER_SINGLETON_WORKFLOW_ID)
+async function assignToBatch({ url }: Pick<Payload, 'url'>) {
+  const handle = getExternalWorkflowHandle(BATCH_ID_ASSIGNER_SINGLETON_WORKFLOW_ID)
 
-  await handle.signal(assignToBatchSignal, { url })
+  await handle.signal(assignToBatchSignal, { item: url })
 }
 
-async function stopScrapingUrl({
+async function removeFromBatch({
   url,
   batchId
 }: Pick<Payload, 'url'> & {
-  batchId: number
+  batchId: number | undefined
 }) {
+  if (!batchId) {
+    return
+  }
+
   const handle = getExternalWorkflowHandle(getBatchProcessorWorkflowId(batchId))
 
-  await handle.signal(stopScrapingUrlSignal, { url })
+  await handle.signal(removeItemsFromBatchSignal, { items: [url] })
 }
-
-const error = (message: string, ...rest: Parameters<typeof console.debug>) => console.log(`⚠️ ${message}`, ...rest)
 
 export async function scrapedUrlStateWorkflow({ url }: Payload) {
   let batchId: number | undefined = undefined
-  let didStopScraping = false
 
-  console.log('starting to scrape url', url)
+  setHandler(addedToBatchSignal, ({ batchId: newBatchId }) => {
+    batchId = newBatchId
 
-  setHandler(batchIdAssignedSignal, (payload) => {
-    if (url !== payload.url) {
-      error('attempted to use batch ID assigned to another url. This should not happen.', {
-        url,
-        payloadUrl: payload.url
-      })
-      return
-    }
-
-    batchId = payload.batchId
-
-    console.log('assigned new batch ID', { url, batchId })
-
-    // potentially add a search attribute for batch id
+    console.log('added to batch', { url, batchId })
   })
 
-  setHandler(stopScrapingUrlSignal, () => {
-    didStopScraping = true
-  })
+  await assignToBatch({ url })
+  await condition(() => batchId !== undefined)
 
-  if (batchId === undefined) {
-    await requestBatchIdForUrl({ url })
+  return
 
-    console.log('requested new batch ID', url)
-  }
-
-  // Run forever unless we signal to stop scraping
-  await condition(() => didStopScraping)
-
-  console.log('stopping the scrape for url', url)
-
-  if (batchId === undefined) {
-    error('failed to stop scraping url as it was never assigned a batch ID', url)
-  } else {
-    await stopScrapingUrl({
-      url,
-      batchId
-    })
-  }
-  
-  return {
-    url,
-    batchId
-  }
+  // try {
+  //   await condition(() => false)
+  // } catch(e) {
+  //   if (isCancellation(e)) {
+  //     return CancellationScope.nonCancellable(() => removeFromBatch({ url, batchId }))
+  //   } else {
+  //     throw e
+  //   }
+  // }
 }
-
-// ## Notes
-// We don't need to continueAsNew as the event history size is fixed.

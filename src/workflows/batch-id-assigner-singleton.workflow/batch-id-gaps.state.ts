@@ -1,4 +1,4 @@
-export function useBatchIsGapsState() {
+export function useBatchIdGapsState() {
   const batchIdToNumberOfGaps: Map<number, number> = new Map()
 
   return {

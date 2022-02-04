@@ -1,29 +1,33 @@
 import { defineSignal } from '@temporalio/workflow'
 
-type PayloadWithUrl = {
-  url: string
+type PayloadWithItem = {
+  item: string
 }
 
-export type ScrapeNewUrlSignalPayload = PayloadWithUrl
+type PayloadWithItems = {
+  items: string[]
+}
 
-export const startScrapingUrlSignal = defineSignal<[ScrapeNewUrlSignalPayload]>('startScrapingUrlSignal')
+type PayloadWithBatchId = {
+  batchId: number
+}
 
-export type StopScrapingUrlSignalPayload = PayloadWithUrl
-
-export const stopScrapingUrlSignal = defineSignal<[StopScrapingUrlSignalPayload]>('stopScrapingUrlSignal')
-
-export type AssignToBatchSignalPayload = PayloadWithUrl
+export type AssignToBatchSignalPayload = PayloadWithItem
 
 export const assignToBatchSignal = defineSignal<[AssignToBatchSignalPayload]>('assignToBatchSignal')
 
-export type BatchIdAssignedSignalPayload = PayloadWithUrl & {
-  batchId: number
-}
+export type AddItemsToBatchSignalPayload = PayloadWithItems
 
-export const batchIdAssignedSignal = defineSignal<[BatchIdAssignedSignalPayload]>('requestNewBatchIdSignal')
+export const addItemsToBatchSignal = defineSignal<[AddItemsToBatchSignalPayload]>('addItemsToBatchSignal')
 
-export type NewGapSignal = {
-  batchId: number
-}
+export type RemoveItemsFromBatchSignalPayload = PayloadWithItems
 
-export const newGapSignal = defineSignal<[NewGapSignal]>('newGapSignal')
+export const removeItemsFromBatchSignal = defineSignal<[RemoveItemsFromBatchSignalPayload]>('removeItemsFromBatchSignal')
+
+export type AddedToBatchSignalPayload = PayloadWithBatchId
+
+export const addedToBatchSignal = defineSignal<[AddedToBatchSignalPayload]>('addedToBatchSignal')
+
+export type RemovedItemFromBatchSignal = PayloadWithBatchId
+
+export const removedItemFromBatchSignal = defineSignal<[RemovedItemFromBatchSignal]>('removedItemFromBatchSignal')
