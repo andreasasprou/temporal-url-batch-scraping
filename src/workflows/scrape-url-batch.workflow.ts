@@ -61,6 +61,8 @@ export async function scrapeUrlBatchWorkflow({ batchId, initialState }: BatchWor
     itemsRemovedToNotify.push(...items)
   })
 
+  // These functions control the interaction with the rest of the system
+  // and define how to process the batch. The rest of this code is generic.
   const handleForAssigner = (): ExternalWorkflowHandle => {
     return getExternalWorkflowHandle(BATCH_ID_ASSIGNER_SINGLETON_WORKFLOW_ID)
   }
@@ -79,6 +81,7 @@ export async function scrapeUrlBatchWorkflow({ batchId, initialState }: BatchWor
     await scrapeUrls()
     await sleep(SCRAPE_INTERVAL)
   }
+  // End of custom functions
 
   // We continue-as-new at least every day to aid in the cleanup of old code versions.
   let TimeToContinueAsNew = false
